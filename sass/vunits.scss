@@ -1,5 +1,3 @@
-@import "compass";
-
 @function calcUnits($input, $width, $height){
   // Store $input unit
   $unit: unit($input);
