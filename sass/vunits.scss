@@ -1,0 +1,119 @@
+@import "compass";
+
+@function calcUnits($input, $width, $height){
+  // Store $input unit
+  $unit: unit($input);
+  // Remove unit from $input and convert to ratio
+  $ratio: $input / ($input * 0 + 1) / 100;
+  // Calc and store return values
+  $widthVal: floor($width * $ratio);
+  $heightVal: floor($height * $ratio);
+
+  $isPortrait: $width < $height;
+
+  @if $unit == vw { @return $widthVal; }
+  @else if $unit == vh { @return $heightVal; }
+
+  @else if $unit == vmax {
+    @if $isPortrait { @return $heightVal; }
+    @else { @return $widthVal; }
+  }
+
+  @else if $unit == vmin {
+    @if $isPortrait { @return $widthVal; }
+    @else { @return $heightVal; }
+  }
+}
+
+$viewpoints: (
+  // iPhone3-4(s) with portrait orientation
+  "only screen
+    and (device-width: 320px)
+    and (device-height: 480px)
+    and (-webkit-min-device-pixel-ratio: 1) // iPhone 3
+    and (-webkit-max-device-pixel-ratio: 2) // iPhone 4
+    and (orientation: portrait)",
+
+  // iPhone5(s) with portrait orientation
+  "only screen
+    and (device-width: 320px)
+    and (device-height: 568px)
+    and (-webkit-min-device-pixel-ratio: 2)
+    and (orientation: portrait)"
+);
+
+@mixin compileVunits(){
+  $viewpoints: append($viewpoints, ( "all" ))!global;
+
+  // Loop thru all breakpoints
+  @each $view in $viewpoints {
+    @media #{$view} {
+      // Loop thru each ruleset in $SelectorGroup
+      @each $target in $SelectorGroup {
+        $select: nth(map-get($target, selector), 1);
+        $rules: nth(map-get($target, rules), 1);
+        #{$select} {
+          // Calc each value by current $view's device specs
+          $property: nth($rules, 1);
+          $value: nth($rules, 2);
+          #{$property}: calcUnits($value, 100px, 200px)
+        }
+      }
+    }
+  }
+}
+
+@mixin vunit($property, $value, $query: null){
+
+   // Check that the $value has a unit
+  @if unitless($value){
+    // Throw error if the $value is unitless
+    @error "Viewport values include a specified unit. Please check your input [#{$value}]";
+  } @else {
+    $unit : unit($value);
+    $units: (vw, vh, vmin, vmax);
+
+    // Check that the unit is a V-unit
+    @if index($units, $unit) == null {
+      // Throw error if a V-unit was not used
+      @error "Viewport values include a specified V-unit. Please check your input [#{$value}]";
+    // Store Selector/Property/Value
+    } @else {
+
+      // Instantiate global $selectors object
+      // Force type-cast as map
+      @if global-variable-exists(SelectorGroup) != true {
+        $SelectorGroup: ()!global;
+      }
+
+      $instance: (
+        selector: &,
+        query: $query,
+        rules: (
+          $property: $value
+        )
+      );
+
+      $SelectorGroup: append($SelectorGroup, $instance)!global;
+    }
+  }
+}
+
+@media all {
+  .test {
+    .hey {
+      @include vunit(height, 70vw);
+      @include vunit(width, 38vw);
+    }
+    .who, .huh {
+      @include vunit(height, 100vw);
+      @include vunit(width, 50vw);
+    }
+    .what {
+      @include vunit(height, 100vw);
+      // @error $SelectorGroup;
+    }
+  }
+}
+
+@include compileVunits();
