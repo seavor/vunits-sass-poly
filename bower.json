@@ -4,8 +4,8 @@
   "main": "https://github.com/seavor/vunits-sass-poly",
   "ignore": [
     "Gemfile.lock",
-    ".sass-chache/",
-    "node_modules/"
+    ".sass-chache",
+    "node_modules"
   ],
   "dependencies": {
     "grunt": "~0.4.1",
