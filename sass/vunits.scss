@@ -1,69 +1,38 @@
-@function calcUnits($input, $width, $height){
-  // Store $input unit
-  $unit: unit($input);
-  // Remove unit from $input and convert to ratio
-  $ratio: $input / ($input * 0 + 1) / 100;
+@function strip-unit($input) {
+  @return $input / ($input * 0 + 1); // <= Sass bug?
+}
+
+$vu-views: ()!global;
+
+@function vu-calc($value, $width, $height){
+  // Store $value unit
+  $unit: unit($value);
+
+  // Remove unit from $value and convert to ratio
+  $ratio: strip-unit($value) / 100;
+
   // Calc and store return values
-  $widthVal: floor($width * $ratio);
-  $heightVal: floor($height * $ratio);
+  $calced-width: floor(strip-unit($width) * $ratio);
+  $calced-height: floor(strip-unit($height) * $ratio);
 
-  $isPortrait: $width < $height;
+  $is-portrait: $calced-width < $calced-height;
 
-  @if $unit == vw { @return $widthVal; }
-  @else if $unit == vh { @return $heightVal; }
+  @if $unit == vw { @return $calced-width; }
+  @else if $unit == vh { @return $calced-height; }
 
   @else if $unit == vmax {
-    @if $isPortrait { @return $heightVal; }
-    @else { @return $widthVal; }
+    @if $is-portrait { @return $calced-height; }
+    @else { @return $calced-width; }
   }
 
   @else if $unit == vmin {
-    @if $isPortrait { @return $widthVal; }
-    @else { @return $heightVal; }
+    @if $is-portrait { @return $calced-width; }
+    @else { @return $calced-height; }
   }
 }
 
-$viewpoints: (
-  // iPhone3-4(s) with portrait orientation
-  "only screen
-    and (device-width: 320px)
-    and (device-height: 480px)
-    and (-webkit-min-device-pixel-ratio: 1) // iPhone 3
-    and (-webkit-max-device-pixel-ratio: 2) // iPhone 4
-    and (orientation: portrait)",
-
-  // iPhone5(s) with portrait orientation
-  "only screen
-    and (device-width: 320px)
-    and (device-height: 568px)
-    and (-webkit-min-device-pixel-ratio: 2)
-    and (orientation: portrait)"
-);
-
-@mixin compileVunits(){
-  $viewpoints: append($viewpoints, ( "all" ))!global;
-
-  // Loop thru all breakpoints
-  @each $view in $viewpoints {
-    @media #{$view} {
-      // Loop thru each ruleset in $SelectorGroup
-      @each $target in $SelectorGroup {
-        $select: nth(map-get($target, selector), 1);
-        $rules: nth(map-get($target, rules), 1);
-        #{$select} {
-          // Calc each value by current $view's device specs
-          $property: nth($rules, 1);
-          $value: nth($rules, 2);
-          #{$property}: calcUnits($value, 100px, 200px)
-        }
-      }
-    }
-  }
-}
-
-@mixin vunit($property, $value, $query: null){
-
-   // Check that the $value has a unit
+@mixin vu-unit($property, $value, $query: null){
+  // Check that the $value has a unit
   @if unitless($value){
     // Throw error if the $value is unitless
     @error "Viewport values include a specified unit. Please check your input [#{$value}]";
@@ -93,25 +62,105 @@ $viewpoints: (
       );
 
       $SelectorGroup: append($SelectorGroup, $instance)!global;
+
+      // Include default styles for supporting devices
+      #{$property}: $value;
     }
   }
 }
 
-@media all {
-  .test {
-    .hey {
-      @include vunit(height, 70vw);
-      @include vunit(width, 38vw);
+@mixin vu-enque-queries($queryList) {
+  @if type-of($queryList) == list {
+    @each $query in $queryList {
+      @if type-of($query) == map {
+        $vu-views: append($vu-views, $query)!global;
+      } @else {
+        @error "Vunit media query targets should be defined as a amp object. ["+type-of(queryList)+"] is not a valid input type.";
+      }
     }
-    .who, .huh {
-      @include vunit(height, 100vw);
-      @include vunit(width, 50vw);
+  }
+  @else {
+    @error "Vunit media queries should be enqued as a list. ["+type-of(queryList)+"] is not a valid input type.";
+  }
+}
+
+@mixin vu-compile(){
+  // Loop thru all breakpoints
+  @each $view in $vu-views {
+    $query-medium: #{map-get($view, medium)};
+    $query-width: #{map-get($view, width)};
+    $query-height: #{map-get($view, height)};
+    $query-extra: #{map-get($view, extra)};
+    $query-string: "#{$query-medium} and (device-width: #{$query-width}) and (device-height: #{$query-height})";
+
+    @if $query-extra != null {
+      $query-string: join($query-string, " " + $query-extra);
     }
-    .what {
-      @include vunit(height, 100vw);
-      // @error $SelectorGroup;
+
+    @media #{$query-string} {
+      // Loop thru each ruleset in $SelectorGroup
+      @each $target in $SelectorGroup {
+        $target-query: nth(map-get($target, query), 1);
+        $select: nth(map-get($target, selector), 1);
+        $rules: nth(map-get($target, rules), 1);
+        $property: nth($rules, 1);
+        $value: nth($rules, 2);
+
+        #{$select} {
+          // Calc each value by current $view's device specs
+          @if $target-query == null {
+            #{$property}: vu-calc($value, $query-width, $query-height);
+          } @else {
+            // insert special query
+            @media #{$target-query} {
+              #{$property}: vu-calc($value, $query-width, $query-height);
+            }
+          }
+        }
+      }
     }
   }
 }
 
-@include compileVunits();
+@include vu-enque-queries((
+  ( // iPhone 3/4(s)
+    medium: "only screen",
+    width: 320px,
+    height: 480px,
+    extra: "and (-webkit-min-device-pixel-ratio: 1) and (-webkit-max-device-pixel-ratio: 2)"
+  ),
+  ( // iPhone 5(s)
+    medium: "only screen",
+    width: 320px,
+    height: 568px,
+    extra: "and (-webkit-min-device-pixel-ratio: 2)"
+  )
+));
+
+
+.test {
+  .hey {
+    @include vu-unit(height, 70vw, "(device-width: 320px) and (device-height: 640px)");
+    @include vu-unit(width, 38vw);
+  }
+  .who, .huh {
+    @include vu-unit(height, 100vw);
+    @include vu-unit(width, 50vw);
+  }
+  .what {
+    @include vu-unit(height, 100vw);
+    // @error $SelectorGroup;
+  }
+}
+
+.another-test {
+  @include vu-unit(width, 50vw);
+  .whaaat {
+    @include vu-unit(width, 50vw);
+    &, & .hey {
+      @include vu-unit(width, 50vw);
+    }
+  }
+}
+
+@include vu-compile();
