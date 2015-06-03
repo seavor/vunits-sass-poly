@@ -5,7 +5,8 @@
   "ignore": [
     "Gemfile.lock",
     ".sass-chache",
-    "node_modules"
+    "node_modules",
+    "bower.json"
   ],
   "dependencies": {},
   "devDependencies": {}
